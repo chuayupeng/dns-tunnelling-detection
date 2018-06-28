@@ -1,15 +1,12 @@
 from scapy.all import *
 import sys
 import math
-import csv
 import numpy as np  
 import pandas as pd  
 from sklearn import utils 
 from sklearn import svm
-#import matplotlib
-
+from sklearn import metrics
 from sklearn.model_selection import train_test_split 
-from sklearn import metrics  
 
 class Node(object):
     def __init__(self, data, ancestry):
@@ -51,7 +48,6 @@ def calculateEntropy(text):
         if p_x > 0: 
             entropy += - p_x*math.log(p_x, 2) 
     return entropy
-
 def extractDNSQueryEntropy(entropyData, isTraining):
     global trainingPackets
     global testPackets
@@ -182,55 +178,47 @@ def trainModel(dataForDataFrame):
     print("recall: ", metrics.recall_score(targs, preds))  
     print("f1: ", metrics.f1_score(targs, preds))  
     print("area under curve (auc): ", metrics.roc_auc_score(targs, preds))
- 
     return model    
-
 def testModel(model, filename):
     root = Node('','')
-    
     entropyData = []
     subdomainCountData = []
     qnamesLen = []
-    
     sniffTestPackets(filename)
     entropyData = extractDNSQueryEntropy(entropyData, False)
     buildTree(root, False)
     subdomainCountData = calculateSubdomainCount(subdomainCountData, root, False)
     qnamesLen = calculateQnamesLen(qnamesLen, False)
-    
     testData = modifyData(entropyData, subdomainCountData, qnamesLen, False)    
     preds = model.predict(testData)
-    print("Suspicious Packets flagged out:")
+    pktdump = scapy.utils.PcapWriter("results.pcap", append=True, sync=True)
+    print("Saving suspicious packets below to pcap file...(results.pcap)")
+    print("Suspicious Query Names flagged out:")
     print("------------------------------")
     i = 0
     while i < len(preds):
         if preds[i] == -1:
-            print(testPackets[i].show())
-            print("------------------------------")
+            print(testPackets[i].qd.qname)
+	    pktdump.write(testPackets[i])
         i+=1
-    
 def testFeatureExtraction(goodFileName, badFileName):
     root = Node('', '')
-    
     entropyData = []
     subdomainCountData = []
     qnamesLen = []   
-    
     sniffTrainingPackets(goodFileName, 1)
     sniffTrainingPackets(badFileName, -1)
     entropyData = extractDNSQueryEntropy(entropyData, True)
     buildTree(root, True)
     subdomainCountData = calculateSubdomainCount(subdomainCountData, root, True)
     qnamesLen = calculateQnamesLen(qnamesLen, True)
-    
     return modifyData(entropyData, subdomainCountData, qnamesLen, True)
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python identifyDomain.py normalTrainingTraffic.pcap maliciousTraffic.pcap fileToExamine.pcap")
+        print("Usage: python main.py good.pcap bad.pcap fileToExamine.pcap")
         sys.exit()
     trainingData = testFeatureExtraction(sys.argv[1], sys.argv[2])
     model = trainModel(trainingData)
     testModel(model, sys.argv[3])
-
 if __name__ == "__main__":
     main()
