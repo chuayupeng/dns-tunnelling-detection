@@ -1,4 +1,4 @@
-# dns-tunneling-detection
+# dns-tunnelling-detection
 Attempt at utilising SVM One Class to classify and detect signs of DNS tunnelling
 
 ## Setup
