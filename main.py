@@ -192,13 +192,14 @@ def testModel(model, filename):
     testData = modifyData(entropyData, subdomainCountData, qnamesLen, False)    
     preds = model.predict(testData)
     pktdump = scapy.utils.PcapWriter("results.pcap", append=True, sync=True)
+    print("Analysis Completed.")
     print("Saving suspicious packets below to pcap file...(results.pcap)")
-    print("Suspicious Query Names flagged out:")
-    print("------------------------------")
+    #print("Suspicious Query Names flagged out:")
+    #print("------------------------------")
     i = 0
     while i < len(preds):
         if preds[i] == -1:
-            print(testPackets[i].qd.qname)
+            #print(testPackets[i].qd.qname)
 	    pktdump.write(testPackets[i])
         i+=1
 def testFeatureExtraction(goodFileName, badFileName):
