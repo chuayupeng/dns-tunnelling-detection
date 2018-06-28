@@ -1,39 +1,11 @@
-from scapy.all import *
-import sys
 import math
+import sys
 import numpy as np  
 import pandas as pd  
-from sklearn import utils 
-from sklearn import svm
-from sklearn import metrics
-from sklearn.model_selection import train_test_split 
-
-class Node(object):
-    def __init__(self, data, ancestry):
-        self.data = data
-        self.children = []
-        self.count = 1
-        self.ancestry = ancestry
-
-    def add_child(self, obj):
-        self.children.append(obj)
-
-    def add_count(self):
-        self.count += 1
-
-    def printNodes(self):
-        if(len(self.children) != 0):
-            if(self.data == ''):
-                print("There are " + str(len(self.children)) + " top level domains")
-            else:
-                print(self.ancestry + " has " + str(len(self.children)) + " subdomains")
-            for child in self.children:
-                if(self.data == ''):
-                    print("    " + child.data + " is a top level domain")
-                else:
-                    print("     " + child.data + " is a subdomain of " + self.ancestry)
-            for child in self.children:		
-                child.printNodes()
+from scapy.all import *
+from sklearn import utils, svm
+import treeNode
+import trainModel
 
 trainingPackets = []
 testPackets = []
@@ -60,40 +32,16 @@ def extractDNSQueryEntropy(entropyData, isTraining):
             pktEntropyValue = calculateEntropy(packet.qd.qname)
             entropyData.append(pktEntropyValue)
     return entropyData
-def populateTree(root, pkt):
-    qname = pkt.qd.qname
-    arrRes = qname.split('.')
-    properOrderedTree = list(reversed(arrRes))
-    tmp = ''
-    node = root
-    for domain in properOrderedTree:
-        if domain == '':
-            node.add_count()
-        else:
-            exists = False
-            for child in node.children:
-                if domain == child.data:
-                    exists = True
-                    child.add_count()
-                    childToGo = child
-                    break
-            if not exists:
-                if tmp != '':
-                    tmp = domain + '.' + tmp
-                else :
-                    tmp = domain
-                childToGo = Node(domain, tmp)
-                node.add_child(childToGo)
-            node = childToGo
+
 def buildTree(root, isTraining):
     global trainingPackets
     global testPackets
     if isTraining:
         for packetWithBool in trainingPackets:
-            populateTree(root, packetWithBool[0])
+            treeNode.populateTree(root, packetWithBool[0])
     else:
         for packet in testPackets:
-            populateTree(root, packet)
+            treeNode.populateTree(root, packet)
 def saveTrainingPackets(normal):
     def sniffPrnFn(pkt):
         global trainingPackets
@@ -160,27 +108,8 @@ def modifyData(entropyData, subdomainCountData, qnamesLen, isTraining):
             dataForDataFrame.append([entropyData[i], subdomainCountData[i], qnamesLen[i]])
             i+=1            
     return dataForDataFrame
-def trainModel(dataForDataFrame):
-    data = pd.DataFrame.from_records(dataForDataFrame, columns=['packet', 'attack', 'entropy', 'subdomainCount', 'queryNameLength'])
-    target=data['attack']
-    outliers=target[target == -1]
-    nu = float(outliers.shape[0])/target.shape[0]
-    print("outliers.shape", outliers.shape)  
-    print("outlier fraction", nu)
-    data.drop(['packet', 'attack'], axis=1, inplace=True)
-    train_data, test_data, train_target, test_target = train_test_split(data, target, train_size = 0.85) 
-    model = svm.OneClassSVM(nu=nu, kernel='rbf', gamma=0.00005)  
-    model.fit(data)
-    preds = model.predict(test_data)  
-    targs = test_target
-    print("accuracy: ", metrics.accuracy_score(targs, preds))  
-    print("precision: ", metrics.precision_score(targs, preds))  
-    print("recall: ", metrics.recall_score(targs, preds))  
-    print("f1: ", metrics.f1_score(targs, preds))  
-    print("area under curve (auc): ", metrics.roc_auc_score(targs, preds))
-    return model    
 def testModel(model, filename):
-    root = Node('','')
+    root = treeNode.Node('','')
     entropyData = []
     subdomainCountData = []
     qnamesLen = []
@@ -194,16 +123,13 @@ def testModel(model, filename):
     pktdump = scapy.utils.PcapWriter("results.pcap", append=True, sync=True)
     print("Analysis Completed.")
     print("Saving suspicious packets below to pcap file...(results.pcap)")
-    #print("Suspicious Query Names flagged out:")
-    #print("------------------------------")
     i = 0
     while i < len(preds):
         if preds[i] == -1:
-            #print(testPackets[i].qd.qname)
-	    pktdump.write(testPackets[i])
+            pktdump.write(testPackets[i])
         i+=1
 def testFeatureExtraction(goodFileName, badFileName):
-    root = Node('', '')
+    root = treeNode.Node('', '')
     entropyData = []
     subdomainCountData = []
     qnamesLen = []   
@@ -214,12 +140,30 @@ def testFeatureExtraction(goodFileName, badFileName):
     subdomainCountData = calculateSubdomainCount(subdomainCountData, root, True)
     qnamesLen = calculateQnamesLen(qnamesLen, True)
     return modifyData(entropyData, subdomainCountData, qnamesLen, True)
+def trainBlind(filename):
+    root = treeNode.Node('', '')
+    entropyData = []
+    subdomainCountData = []
+    qnamesLen = []
+    sniffTestPackets(filename)
+    entropyData = extractDNSQueryEntropy(entropyData, False)
+    buildTree(root, False)
+    subdomainCountData = calculateSubdomainCount(subdomainCountData, root, False)
+    qnamesLen = calculateQnamesLen(qnamesLen, False)
+    testData = modifyData(entropyData, subdomainCountData, qnamesLen, False)
+    model = svm.OneClassSVM(nu=0.01, kernel='rbf', gamma=0.00005)  
+    model.fit(testData)    
+    testModel(model, filename)
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python main.py good.pcap bad.pcap fileToExamine.pcap")
+    if len(sys.argv) != 2 and len(sys.argv) < 3:
+        print("Usage: python main.py fileToExamine.pcap                      to do unsupervised outlier detection")
+        print("Usage: python main.py good.pcap bad.pcap fileToExamine.pcap   for additional checks on accuracy of model")
         sys.exit()
-    trainingData = testFeatureExtraction(sys.argv[1], sys.argv[2])
-    model = trainModel(trainingData)
-    testModel(model, sys.argv[3])
+    if(len(sys.argv) == 2):
+        trainBlind(sys.argv[1])
+    else:
+        trainingData = testFeatureExtraction(sys.argv[1], sys.argv[2])
+        model = trainModel.trainModel(trainingData)
+        testModel(model, sys.argv[3])
 if __name__ == "__main__":
     main()
