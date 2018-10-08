@@ -118,7 +118,10 @@ def modifyData(entropyData, subdomainCountData, qnamesLen, isTraining):
     return dataForDataFrame
 
 def testModel(model, filename):
-    resetGlobalValues()
+    root = treeNode.Node('','')
+    entropyData = []
+    subdomainCountData = []
+    qnamesLen = []
     sniffTestPackets(filename)
     entropyData = extractDNSQueryEntropy(entropyData, False)
     buildTree(root, False)
@@ -136,7 +139,10 @@ def testModel(model, filename):
         i+=1
 
 def testFeatureExtraction(goodFileName, badFileName):
-    resetGlobalValues()   
+    root = treeNode.Node('', '')
+    entropyData = []
+    subdomainCountData = []
+    qnamesLen = []   
     sniffTrainingPackets(goodFileName, 1)
     sniffTrainingPackets(badFileName, -1)
     entropyData = extractDNSQueryEntropy(entropyData, True)
@@ -146,7 +152,10 @@ def testFeatureExtraction(goodFileName, badFileName):
     return modifyData(entropyData, subdomainCountData, qnamesLen, True)
 
 def trainBlind(filename):
-    resetGlobalValues()
+    root = treeNode.Node('', '') 
+    entropyData = []
+    subdomainCountData = []
+    qnamesLen = []
     sniffTestPackets(filename)
     entropyData = extractDNSQueryEntropy(entropyData, False)
     buildTree(root, False)
@@ -156,12 +165,6 @@ def trainBlind(filename):
     model = svm.OneClassSVM(nu=0.01, kernel='rbf', gamma=0.00005)  
     model.fit(testData)    
     testModel(model, filename)
-
-def resetGlobalValues():
-    root = treeNode.Node('','')
-    entropyData = []
-    subdomainCountData = []
-    qnamesLen = []
 
 def main():
     if len(sys.argv) != 2 and len(sys.argv) < 3:
