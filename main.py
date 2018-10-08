@@ -20,6 +20,7 @@ def calculateEntropy(text):
         if p_x > 0: 
             entropy += - p_x*math.log(p_x, 2) 
     return entropy
+
 def extractDNSQueryEntropy(entropyData, isTraining):
     global trainingPackets
     global testPackets
@@ -42,20 +43,25 @@ def buildTree(root, isTraining):
     else:
         for packet in testPackets:
             treeNode.populateTree(root, packet)
+
 def saveTrainingPackets(normal):
     def sniffPrnFn(pkt):
         global trainingPackets
         if pkt.haslayer(DNS) and hasattr(pkt.qd, 'qname'):
             trainingPackets.append([pkt, normal])
     return sniffPrnFn
+
 def saveTestPackets(pkt):
     global testPackets
     if pkt.haslayer(DNS) and hasattr(pkt.qd, 'qname'):
         testPackets.append(pkt)
+
 def sniffTrainingPackets(filename, normal):
     sniff(offline=filename, prn=saveTrainingPackets(normal), store=0)
+
 def sniffTestPackets(filename):
     sniff(offline=filename, prn=saveTestPackets, store=0)
+
 def calculateSubdomainCount(subdomainCountData, root, isTraining):
     global trainingPackets
     global testPackets
@@ -84,6 +90,7 @@ def calculateSubdomainCount(subdomainCountData, root, isTraining):
                         break
             subdomainCountData.append(count)            
     return subdomainCountData
+
 def calculateQnamesLen(qnamesLen, isTraining):
     global trainingPackets
     global testPackets
@@ -94,6 +101,7 @@ def calculateQnamesLen(qnamesLen, isTraining):
         for packet in testPackets:
             qnamesLen.append(len(packet.qd.qname))
     return qnamesLen
+
 def modifyData(entropyData, subdomainCountData, qnamesLen, isTraining):
     global trainingPackets
     global testPackets
@@ -108,11 +116,9 @@ def modifyData(entropyData, subdomainCountData, qnamesLen, isTraining):
             dataForDataFrame.append([entropyData[i], subdomainCountData[i], qnamesLen[i]])
             i+=1            
     return dataForDataFrame
+
 def testModel(model, filename):
-    root = treeNode.Node('','')
-    entropyData = []
-    subdomainCountData = []
-    qnamesLen = []
+    resetGlobalValues()
     sniffTestPackets(filename)
     entropyData = extractDNSQueryEntropy(entropyData, False)
     buildTree(root, False)
@@ -133,11 +139,9 @@ def testModel(model, filename):
     print("Within the results, the breakdown of the domains are as such:")
     print("Ignoring any domains with only 1 subdomain...")        
     resultsTree.printNodes()
+
 def testFeatureExtraction(goodFileName, badFileName):
-    root = treeNode.Node('', '')
-    entropyData = []
-    subdomainCountData = []
-    qnamesLen = []   
+    resetGlobalValues()   
     sniffTrainingPackets(goodFileName, 1)
     sniffTrainingPackets(badFileName, -1)
     entropyData = extractDNSQueryEntropy(entropyData, True)
@@ -145,11 +149,9 @@ def testFeatureExtraction(goodFileName, badFileName):
     subdomainCountData = calculateSubdomainCount(subdomainCountData, root, True)
     qnamesLen = calculateQnamesLen(qnamesLen, True)
     return modifyData(entropyData, subdomainCountData, qnamesLen, True)
+
 def trainBlind(filename):
-    root = treeNode.Node('', '')
-    entropyData = []
-    subdomainCountData = []
-    qnamesLen = []
+    resetGlobalValues()
     sniffTestPackets(filename)
     entropyData = extractDNSQueryEntropy(entropyData, False)
     buildTree(root, False)
@@ -159,6 +161,13 @@ def trainBlind(filename):
     model = svm.OneClassSVM(nu=0.01, kernel='rbf', gamma=0.00005)  
     model.fit(testData)    
     testModel(model, filename)
+
+def resetGlobalValues():
+    root = treeNode.Node('','')
+    entropyData = []
+    subdomainCountData = []
+    qnamesLen = []
+
 def main():
     if len(sys.argv) != 2 and len(sys.argv) < 3:
         print("Usage: python main.py fileToExamine.pcap                      to do unsupervised outlier detection")
