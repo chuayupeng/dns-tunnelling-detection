@@ -129,11 +129,16 @@ def testModel(model, filename):
     pktdump = scapy.utils.PcapWriter("results.pcap", append=True, sync=True)
     print("Analysis Completed.")
     print("Saving suspicious packets below to pcap file...(results.pcap)")
+    resultsTree = treeNode.Node('','')
     i = 0
     while i < len(preds):
         if preds[i] == -1:
             pktdump.write(testPackets[i])
+            treeNode.populateTree(resultsTree, testPackets[i])
         i+=1
+    print("Within the results, the breakdown of the domains are as such:")
+    print("Ignoring any domains with only 1 subdomain...")        
+    resultsTree.printNodes()
 
 def testFeatureExtraction(goodFileName, badFileName):
     resetGlobalValues()   
