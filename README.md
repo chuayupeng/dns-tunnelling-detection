@@ -25,7 +25,7 @@ The last file can be whatever you want to test the model against.
 
 Command:
 
-```python main.py pcap/good.pcap pcap/dns-tunnel-iodine.pcap pcap/population.pcap```
+```python main.py pcap/good.pcap pcap/bad.pcap pcap/population.pcap```
 
 ### Running just against the test file to check for outliers
 
